@@ -6,6 +6,7 @@ from os.path import dirname
 from os.path import join
 from mako.template import Template
 from unicodedata import normalize
+from time import time
 
 def main():
     image = Image.open('marbles.bmp')
@@ -15,6 +16,7 @@ def main():
 
 
     cl.run()
+    print("{} s, {}".format(cl.run_time, 0.066923867/cl.run_time))
     black_and_white = image.copy()
     #black_and_white = Image.new('RGB', (width, height), "black")
 
@@ -24,10 +26,8 @@ def main():
         #print(width, height, x, y)
         black_and_white.putpixel((x, y), tuple(cl.output_pixel_array[index]))
 
-
-
-    print(list(black_and_white.getdata())[50000:50010])
-    print(cl.pixel_array[50000:50010])
+    # print(list(black_and_white.getdata())[50000:50010])
+    # print(cl.pixel_array[50000:50010])
     black_and_white.save("grey.bmp")
 
 
@@ -51,7 +51,7 @@ class BlackAndWhite(object):
             # print(device)
 
         self.cl_context = cl.Context(devices=my_gpu_devices)
-        self.cl_queue = cl.CommandQueue(self.cl_context)
+        self.cl_queue = cl.CommandQueue(self.cl_context, properties=cl.command_queue_properties.PROFILING_ENABLE)
 
         # Setup buffers
         mf = cl.mem_flags
@@ -69,13 +69,17 @@ class BlackAndWhite(object):
         self.setup_opencl()
 
         global_size = (self.total_size, )
-        # local_size = (1, )
+        # local_size = (256, )
         local_size = None
-        compute_event = self.cl_program.to_black_and_white(self.cl_queue, global_size, None, self.cl_input_image_buf, self.cl_output_image_buf)
+        start_time = time()
 
+        compute_event = self.cl_program.to_black_and_white(self.cl_queue, global_size, local_size, self.cl_input_image_buf, self.cl_output_image_buf)
         compute_event.wait()
         cl.enqueue_read_buffer(self.cl_queue, self.cl_output_image_buf, self.output_pixel_array).wait()
-        
+
+        end_time = time()
+
+        self.run_time = 1e-9*(compute_event.profile.end - compute_event.profile.start)
 
     def get_kernel(self, file_name, **parameters):
         # get current directory, look in kernels/ for the mako file
